@@ -1,17 +1,64 @@
 'use client'
 
-import { Container, Text, useToast, Button, Tooltip } from '@chakra-ui/react'
-import { useAppKitAccount, useAppKitNetwork, useAppKitProvider } from '@reown/appkit/react'
+import {
+  Container,
+  Text,
+  Box,
+  Heading,
+  VStack,
+  HStack,
+  Badge,
+  Flex,
+  Spacer,
+  Button,
+  useToast,
+} from '@chakra-ui/react'
+import { useAppKitAccount, useAppKitProvider } from '@reown/appkit/react'
 import { BrowserProvider, parseEther, formatEther } from 'ethers'
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { useTranslation } from '@/hooks/useTranslation'
+
+// Define the type for questionnement items
+interface Questionnement {
+  id: number
+  name: string
+  description: string
+  votes_for: number
+  votes_against: number
+}
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [txLink, setTxLink] = useState<string>()
   const [txHash, setTxHash] = useState<string>()
   const [balance, setBalance] = useState<string>('0')
+
+  // Define the initial questionnements array with 3 default items
+  const [questionnements, setQuestionnements] = useState<Questionnement[]>([
+    {
+      id: 1,
+      name: 'La pollution de la rivière X',
+      description:
+        "Nous savons que l'usine Y engendre des déchêts conséquents. Devrions-nous enquêter sur la pollution de la rivière X",
+      votes_for: 12,
+      votes_against: 5,
+    },
+    {
+      id: 2,
+      name: "L'installation de la Ferme du Bonheur",
+      description: "Interview de Jean-Michel qui vient de s'installer en tant qu'agriculteur.",
+      votes_for: 8,
+      votes_against: 15,
+    },
+    {
+      id: 3,
+      name: 'Fermeture du Crazy Bar',
+      description:
+        'La préfecture a ordonné la fermeture du Crazy Bar. Devrions-nous enquêter sur ce sujet ?',
+      votes_for: 24,
+      votes_against: 2,
+    },
+  ])
 
   const { address, isConnected } = useAppKitAccount()
   const { walletProvider } = useAppKitProvider('eip155')
@@ -34,95 +81,116 @@ export default function Home() {
     checkBalance()
   }, [address, walletProvider])
 
-  const handleSend = async () => {
-    setTxHash('')
-    setTxLink('')
-    if (!address || !walletProvider) {
+  const handleVote = (id: number, voteType: 'for' | 'against') => {
+    if (!isConnected) {
       toast({
         title: t.common.error,
         description: t.home.notConnected,
         status: 'error',
-        duration: 5000,
+        duration: 3000,
         isClosable: true,
       })
       return
     }
 
-    setIsLoading(true)
-    try {
-      const provider = new BrowserProvider(walletProvider as any)
-      const signer = await provider.getSigner()
-
-      const tx = await signer.sendTransaction({
-        to: address,
-        value: parseEther('0.0001'),
+    setQuestionnements(prev =>
+      prev.map(item => {
+        if (item.id === id) {
+          if (voteType === 'for') {
+            return { ...item, votes_for: item.votes_for + 1 }
+          } else {
+            return { ...item, votes_against: item.votes_against + 1 }
+          }
+        }
+        return item
       })
+    )
 
-      const receipt = await tx.wait(1)
-
-      setTxHash(receipt?.hash)
-      setTxLink('https://sepolia.etherscan.io/tx/' + receipt?.hash)
-
-      toast({
-        title: t.common.success,
-        description: `${t.home.transactionSuccess}: 0.0001 ETH to ${address}`,
-        status: 'success',
-        duration: 5000,
-        isClosable: true,
-      })
-    } catch (error) {
-      console.error('Transaction failed:', error)
-      toast({
-        title: t.home.transactionFailed,
-        description: error instanceof Error ? error.message : 'Unknown error occurred',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      })
-    } finally {
-      setIsLoading(false)
-    }
+    toast({
+      title: 'Vote enregistré',
+      description: `Vous avez voté ${voteType === 'for' ? 'pour' : 'contre'} cette proposition.`,
+      status: 'success',
+      duration: 3000,
+      isClosable: true,
+    })
   }
 
-  const hasEnoughBalance = Number(balance) >= 0.0001
+  // Sort questionnements by votes_for in descending order
+  const sortedQuestionnements = [...questionnements].sort((a, b) => b.votes_for - a.votes_for)
 
   return (
-    <Container maxW="container.sm" py={20}>
-      <Text mb={4}>{t.home.title}</Text>
-      {isConnected && (
-        <Tooltip
-          label={!hasEnoughBalance ? t.home.insufficientBalance : ''}
-          isDisabled={hasEnoughBalance}
-          hasArrow
-          bg="black"
-          color="white"
-          borderWidth="1px"
-          borderColor="red.500"
-          borderRadius="md"
-          p={2}
-        >
-          <Button
-            onClick={handleSend}
-            isLoading={isLoading}
-            loadingText={t.common.loading}
-            bg="#45a2f8"
-            color="white"
-            _hover={{
-              bg: '#3182ce',
-            }}
-            isDisabled={!hasEnoughBalance}
+    <Container maxW="container.md" py={20}>
+      <VStack spacing={8} align="stretch">
+        <Heading as="h3" size="lg" mb={6}>
+          Questionnements
+        </Heading>
+
+        {sortedQuestionnements.map(item => (
+          <Box
+            key={item.id}
+            borderWidth="2px"
+            borderColor="#8c1c84"
+            borderRadius="xl"
+            p={5}
+            boxShadow="sm"
+            transition="all 0.2s"
+            _hover={{ boxShadow: 'md' }}
           >
-            {t.home.sendEth}
-          </Button>
-        </Tooltip>
-      )}
-      {txHash && isConnected && (
-        <Text py={4} fontSize="14px" color="#45a2f8">
-          <Link target="_blank" rel="noopener noreferrer" href={txLink ? txLink : ''}>
-            {txHash}
-          </Link>
-        </Text>
-      )}
+            <VStack align="stretch" spacing={3}>
+              <Flex align="center">
+                <Heading as="h4" size="md">
+                  {item.name}
+                </Heading>
+                <Spacer />
+                <HStack spacing={2}>
+                  {/* <Badge colorScheme="green" fontSize="sm" px={2} py={1} borderRadius="full">
+                    Pour: {item.votes_for}
+                  </Badge>
+                  <Badge colorScheme="red" fontSize="sm" px={2} py={1} borderRadius="full">
+                    Contre: {item.votes_against}
+                  </Badge> */}
+
+                  <Badge colorScheme="green" fontSize="sm" px={2} py={1} borderRadius="full">
+                    {item.votes_for}
+                  </Badge>
+                </HStack>
+              </Flex>
+
+              <Text>{item.description}</Text>
+
+              <Flex mt={2}>
+                <Button
+                  size="sm"
+                  colorScheme="green"
+                  variant="outline"
+                  onClick={() => handleVote(item.id, 'for')}
+                  isDisabled={!isConnected}
+                >
+                  Voter Pour
+                </Button>
+                <Spacer />
+                <Button
+                  size="sm"
+                  colorScheme="red"
+                  variant="outline"
+                  onClick={() => handleVote(item.id, 'against')}
+                  isDisabled={!isConnected}
+                >
+                  Voter Contre
+                </Button>
+              </Flex>
+            </VStack>
+          </Box>
+        ))}
+
+        <Box textAlign="center" mt={6} p={4} bg="blackAlpha.200" borderRadius="md">
+          <Text fontSize="sm">
+            {isConnected
+              ? 'Vous pouvez voter sur les questionnements ci-dessus'
+              : 'Connectez-vous pour voter'}
+          </Text>
+        </Box>
+      </VStack>
     </Container>
   )
 }
